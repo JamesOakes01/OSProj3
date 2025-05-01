@@ -1,7 +1,18 @@
 #include "io_helper.h"
 #include "request.h"
+#include <string.h>
 
 #define MAXBUF (8192)
+
+pthread_mutex_t bufferRequestLock = PTHREAD_MUTEX_INITIALIZER;
+
+struct Request{
+  int fd;
+  char filename[MAXBUFF];
+  int size;
+}
+
+Request requestBuffer[10]; //requests buffer array
 
 
 //
@@ -174,7 +185,15 @@ void request_handle(int fd) {
 			return;
 		}
 		
-		// TODO: write code to add HTTP requests in the buffer based on the scheduling policy
+		// TODO: write code to add HTTP requests in the buffersed on the scheduling policy
+    Request newRequest = {fd, filename, sbuf.st_size};
+
+    // Directory Traversal mitigation
+    char cwdbuff[256];
+    getcwd(cwdbuff, sizeof(cwdbuff));
+    if (strstr(filename, '..') != NULL) { /*the request contains a file path outside of the current webserver director (current working directory)*/
+      request_error(fd, filename, "403", "Invalid Path", "The requested file path contains an illegal character.");
+    }
 
     } else {
 		request_error(fd, filename, "501", "Not Implemented", "server does not serve dynamic content request");
