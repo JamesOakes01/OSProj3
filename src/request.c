@@ -6,6 +6,8 @@
 
 pthread_mutex_t requestBufferLock = PTHREAD_MUTEX_INITIALIZER;
 int currentRequestBufferSize = 0;
+pthread_cond_t bufferEmpty = PTHREAD_COND_INITIALIZER; //for children
+pthread_cond_t bufferFull = PTHREAD_COND_INITIALIZER; //for parent
 
 struct Request{
   int fd;
@@ -13,11 +15,11 @@ struct Request{
   int size;
 };
 
-struct Request requestBuffer[10]; //requests buffer array
+Request requestBuffer[10]; //requests buffer array
 
 
 //
-//	TODO: add code to create and manage the buffer
+//	TODO: add code to create and manage the buffer // mostly done already
 //
 
 //
@@ -129,7 +131,6 @@ void request_serve_static(int fd, char *filename, int filesize) {
     // put together response
     sprintf(buf, ""
 	    "HTTP/1.0 200 OK\r\n"
-//	TODO: add code to
 	    "Server: OSTEP WebServer\r\n"
 	    "Content-Length: %d\r\n"
 	    "Content-Type: %s\r\n\r\n", 
@@ -148,6 +149,46 @@ void request_serve_static(int fd, char *filename, int filesize) {
 void* thread_request_serve_static(void* arg)
 {
 	// TODO: write code to actualy respond to HTTP requests
+  //remove request from buffer. lock, check the condition variable to make sure it isn't empty, then remove, then decrement buffer size vairable. signal on full. unlock
+  //use different functions for fifo, random, and smallest first
+
+
+  int index = -1;
+  switch (scheduling_algo)
+  {
+  case 0:
+    index = fifo();
+  case 1:
+    index = SmallestFirst();
+  case 2:
+    index = random();
+  default:
+    printf("invalid value in switch case");
+  }
+  //remove buffer
+  Request newRequest = requestBuffer[index];
+  //logic to shift buffer so there are no gaps goes here.
+
+  //buffersize decrement
+  //child wait on buffer empty and signal on buffer full
+  //variable condition signal
+  //unlock
+  request_serve_static(newRequest.fd, newRequest.filename, newRequest.size);
+}
+
+//get index of request to serve based on fifo scheduler
+int fifo(){ 
+  return 0;
+}
+
+//get index of request to serve based on random scheduler
+int random(){ 
+  //random number between 0 and current buffersize
+}
+
+//smallest file first
+int SmallestFirst(){ 
+  //smallest first
 }
 
 //
@@ -188,26 +229,26 @@ void request_handle(int fd) {
 		}
 		
 		// TODO: write code to add HTTP requests in the buffersed on the scheduling policy
-    struct Request newRequest = {fd, filename, sbuf.st_size};
+    Request newRequest = {fd, filename, sbuf.st_size};
     //bufferRequestLock = //lock the buffer if the buffer is locked then wait or spin or something otherwise lock
-    if (pthread_mutex_trylock(&requestBufferLock) == 0){
+    pthread_mutex_lock(&requestBufferLock);
       //the bufferRequestLock wasn't locked so now it is
       
       //check to see if buffer is fullsd
-      if (currentRequestBufferSize >= 10){
+      while (currentRequestBufferSize >= 10){
         //buffer is full
         printf("requestBuffer is full\n");
-      } else {
+        pthread_cond_wait(&bufferFull, &requestBufferLock);
+      }
         //buffer is not full, proceed
         //put request into the buffer at current size
         requestBuffer[currentRequestBufferSize] = newRequest;
         //increment the size
         currentRequestBufferSize++;
-      }
+        pthread_cond_signal(&bufferEmpty);
       pthread_mutex_unlock(&requestBufferLock); //unlock buffer
-    } else {
-      //the bufferRequestLock is locked TODO: so we should do something. Maybe wait or spin or something else.
     }
+  
     
 
 
