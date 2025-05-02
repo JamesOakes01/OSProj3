@@ -4,15 +4,16 @@
 
 #define MAXBUF (8192)
 
-pthread_mutex_t bufferRequestLock = PTHREAD_MUTEX_INITIALIZER;
+pthread_mutex_t requestBufferLock = PTHREAD_MUTEX_INITIALIZER;
+int currentRequestBufferSize = 0;
 
 struct Request{
   int fd;
-  char filename[MAXBUFF];
+  char filename[MAXBUF]; //or hardcode 256
   int size;
-}
+};
 
-Request requestBuffer[10]; //requests buffer array
+struct Request requestBuffer[10]; //requests buffer array
 
 
 //
@@ -128,6 +129,7 @@ void request_serve_static(int fd, char *filename, int filesize) {
     // put together response
     sprintf(buf, ""
 	    "HTTP/1.0 200 OK\r\n"
+//	TODO: add code to
 	    "Server: OSTEP WebServer\r\n"
 	    "Content-Length: %d\r\n"
 	    "Content-Type: %s\r\n\r\n", 
@@ -186,7 +188,28 @@ void request_handle(int fd) {
 		}
 		
 		// TODO: write code to add HTTP requests in the buffersed on the scheduling policy
-    Request newRequest = {fd, filename, sbuf.st_size};
+    struct Request newRequest = {fd, filename, sbuf.st_size};
+    //bufferRequestLock = //lock the buffer if the buffer is locked then wait or spin or something otherwise lock
+    if (pthread_mutex_trylock(&requestBufferLock) == 0){
+      //the bufferRequestLock wasn't locked so now it is
+      
+      //check to see if buffer is fullsd
+      if (currentRequestBufferSize >= 10){
+        //buffer is full
+        printf("requestBuffer is full\n");
+      } else {
+        //buffer is not full, proceed
+        //put request into the buffer at current size
+        requestBuffer[currentRequestBufferSize] = newRequest;
+        //increment the size
+        currentRequestBufferSize++;
+      }
+      pthread_mutex_unlock(&requestBufferLock); //unlock buffer
+    } else {
+      //the bufferRequestLock is locked TODO: so we should do something. Maybe wait or spin or something else.
+    }
+    
+
 
     // Directory Traversal mitigation
     char cwdbuff[256];
