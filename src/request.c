@@ -152,6 +152,15 @@ void* thread_request_serve_static(void* arg)
   //remove request from buffer. lock, check the condition variable to make sure it isn't empty, then remove, then decrement buffer size vairable. signal on full. unlock
   //use different functions for fifo, random, and smallest first
 
+  //locks the buffer
+  pthread_mutex_lock(&requestBufferLock);
+
+  //check condition variable before proceeding
+  while (currentRequestBufferSize < 0){
+    //buffer is empty
+    printf("requestBuffer is empty\n");
+    pthread_cond_wait(&bufferEmpty, &requestBufferLock);
+  }
 
   int index = -1;
   switch (scheduling_algo)
@@ -165,13 +174,21 @@ void* thread_request_serve_static(void* arg)
   default:
     printf("invalid value in switch case");
   }
-  //remove buffer
+  
+  //sets the newRequest to the request in the buffer from the scheudling policies
   Request newRequest = requestBuffer[index];
-  //logic to shift buffer so there are no gaps goes here.
 
+  //removes request from buffer and logic to shift buffer so there are no gaps.
+  for (int i = index; i < currentRequestBufferSize - 1; i++) {
+    requestBuffer[i] = requestBuffer[i + 1];
+  }
   //buffersize decrement
-  //child wait on buffer empty and signal on buffer full
+  currentRequestBufferSize--;
+
+  //child wait on buffer empty and signal on buffer full?????    <-this might be reversed
   //variable condition signal
+  pthread_cond_signal(&bufferFull);
+
   //unlock
   request_serve_static(newRequest.fd, newRequest.filename, newRequest.size);
 }
