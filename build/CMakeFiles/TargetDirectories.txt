@@ -1,0 +1,4 @@
+/home/james/OSProj3/build/CMakeFiles/server.dir
+/home/james/OSProj3/build/CMakeFiles/client.dir
+/home/james/OSProj3/build/CMakeFiles/edit_cache.dir
+/home/james/OSProj3/build/CMakeFiles/rebuild_cache.dir

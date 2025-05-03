@@ -10,7 +10,7 @@ int currentRequestBufferSize = 0;
 pthread_cond_t bufferEmpty = PTHREAD_COND_INITIALIZER; //for children
 pthread_cond_t bufferFull = PTHREAD_COND_INITIALIZER; //for parent
 
-struct Request{
+typedef struct Request{
   int fd;
   char filename[MAXBUF]; //or hardcode 256
   int size;
@@ -144,6 +144,54 @@ void request_serve_static(int fd, char *filename, int filesize) {
     munmap_or_die(srcp, filesize);
 }
 
+//get index of request to serve based on fifo scheduler
+int fifo(){ 
+  return 0;
+}
+
+//get index of request to serve based on random scheduler
+int random_schedule(){ 
+  //random number between 0 and current buffersize
+  return (rand() % currentRequestBufferSize);
+}
+
+//smallest file first
+int SmallestFirst(){
+  int currentSmallestSize = findSize(requestBuffer[0].filename);
+  int indexOfSmallestSize = 0;
+  for (int i = 1; i < currentRequestBufferSize; i++){
+    if ((findSize(requestBuffer[i].filename)) < currentSmallestSize){
+      indexOfSmallestSize = i;
+      currentSmallestSize = findSize(requestBuffer[i].filename);
+    }
+  }
+  return indexOfSmallestSize;
+}
+
+
+//function to find the size of a file. This code function is from GeeksForGeeks.com. https://www.geeksforgeeks.org/c-program-find-size-file/
+long int findSize(char file_name[]) 
+{ 
+    // opening the file in read mode 
+    FILE* fp = fopen(file_name, "r"); 
+  
+    // checking if the file exist or not 
+    if (fp == NULL) { 
+        printf("File Not Found!\n"); 
+        return -1; 
+    } 
+  
+    fseek(fp, 0L, SEEK_END); 
+  
+    // calculating the size of the file 
+    long int res = ftell(fp); 
+  
+    // closing the file 
+    fclose(fp); 
+  
+    return res; 
+} 
+
 //
 // Fetches the requests from the buffer and handles them (thread logic)
 //
@@ -199,54 +247,6 @@ void* thread_request_serve_static(void* arg)
   request_serve_static(newRequest.fd, newRequest.filename, newRequest.size);
   return NULL;
 }
-
-//get index of request to serve based on fifo scheduler
-int fifo(){ 
-  return 0;
-}
-
-//get index of request to serve based on random scheduler
-int random(){ 
-  //random number between 0 and current buffersize
-  return (rand() % currentRequestBufferSize);
-}
-
-//smallest file first
-int SmallestFirst(){
-  int currentSmallestSize = findSize(requestBuffer[0].filename);
-  int indexOfSmallestSize = 0;
-  for (int i = 1; i < currentRequestBufferSize; i++){
-    if ((findSize(requestBuffer[i].filename)) < currentSmallestSize){
-      indexOfSmallestSize = i;
-      currentSmallestSize = findSize(requestBuffer[i].filename);
-    }
-  }
-  return indexOfSmallestSize;
-}
-
-
-//function to find the size of a file. This code function is from GeeksForGeeks.com. https://www.geeksforgeeks.org/c-program-find-size-file/
-long int findSize(char file_name[]) 
-{ 
-    // opening the file in read mode 
-    FILE* fp = fopen(file_name, "r"); 
-  
-    // checking if the file exist or not 
-    if (fp == NULL) { 
-        printf("File Not Found!\n"); 
-        return -1; 
-    } 
-  
-    fseek(fp, 0L, SEEK_END); 
-  
-    // calculating the size of the file 
-    long int res = ftell(fp); 
-  
-    // closing the file 
-    fclose(fp); 
-  
-    return res; 
-} 
 
 //
 // Initial handling of the request
