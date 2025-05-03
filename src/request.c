@@ -157,7 +157,7 @@ void* thread_request_serve_static(void* arg)
   pthread_mutex_lock(&requestBufferLock);
 
   //check condition variable before proceeding
-  while (currentRequestBufferSize < 0){
+  while (currentRequestBufferSize == 0){
     //buffer is empty
     printf("requestBuffer is empty\n");
     pthread_cond_wait(&bufferEmpty, &requestBufferLock);
@@ -197,6 +197,7 @@ void* thread_request_serve_static(void* arg)
   //unlock
   pthread_mutex_unlock(&requestBufferLock);
   request_serve_static(newRequest.fd, newRequest.filename, newRequest.size);
+  return NULL;
 }
 
 //get index of request to serve based on fifo scheduler
