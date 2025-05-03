@@ -5,16 +5,22 @@
 
 #define MAXBUF (8192)
 
+//added to fix bugs:
+int buffer_max_size = DEFAULT_BUFFER_SIZE;
+int buffer_size = 0;
+int scheduling_algo = DEFAULT_SCHED_ALGO;
+int num_threads = DEFAULT_THREADS;
+
 pthread_mutex_t requestBufferLock = PTHREAD_MUTEX_INITIALIZER;
 int currentRequestBufferSize = 0;
 pthread_cond_t bufferEmpty = PTHREAD_COND_INITIALIZER; //for children
 pthread_cond_t bufferFull = PTHREAD_COND_INITIALIZER; //for parent
 
-typedef struct Request{
+typedef struct{
   int fd;
   char filename[MAXBUF]; //or hardcode 256
   int size;
-};
+} Request;
 
 Request requestBuffer[10]; //requests buffer array
 
@@ -144,30 +150,6 @@ void request_serve_static(int fd, char *filename, int filesize) {
     munmap_or_die(srcp, filesize);
 }
 
-//get index of request to serve based on fifo scheduler
-int fifo(){ 
-  return 0;
-}
-
-//get index of request to serve based on random scheduler
-int random_schedule(){ 
-  //random number between 0 and current buffersize
-  return (rand() % currentRequestBufferSize);
-}
-
-//smallest file first
-int SmallestFirst(){
-  int currentSmallestSize = findSize(requestBuffer[0].filename);
-  int indexOfSmallestSize = 0;
-  for (int i = 1; i < currentRequestBufferSize; i++){
-    if ((findSize(requestBuffer[i].filename)) < currentSmallestSize){
-      indexOfSmallestSize = i;
-      currentSmallestSize = findSize(requestBuffer[i].filename);
-    }
-  }
-  return indexOfSmallestSize;
-}
-
 
 //function to find the size of a file. This code function is from GeeksForGeeks.com. https://www.geeksforgeeks.org/c-program-find-size-file/
 long int findSize(char file_name[]) 
@@ -191,6 +173,30 @@ long int findSize(char file_name[])
   
     return res; 
 } 
+
+//get index of request to serve based on fifo scheduler
+int fifo(){ 
+  return 0;
+}
+
+//get index of request to serve based on random scheduler
+int random_schedule(){ 
+  //random number between 0 and current buffersize
+  return (rand() % currentRequestBufferSize);
+}
+
+//smallest file first
+int SmallestFirst(){
+  int currentSmallestSize = findSize(requestBuffer[0].filename);
+  int indexOfSmallestSize = 0;
+  for (int i = 1; i < currentRequestBufferSize; i++){
+    if ((findSize(requestBuffer[i].filename)) < currentSmallestSize){
+      indexOfSmallestSize = i;
+      currentSmallestSize = findSize(requestBuffer[i].filename);
+    }
+  }
+  return indexOfSmallestSize;
+}
 
 //
 // Fetches the requests from the buffer and handles them (thread logic)
@@ -286,7 +292,16 @@ void request_handle(int fd) {
 		}
 		
 		// TODO: write code to add HTTP requests in the buffersed on the scheduling policy
-    Request newRequest = {fd, filename, sbuf.st_size};
+    //Request newRequest = {fd, filename, sbuf.st_size}; removing based to fix errors
+
+    //AI Recommended bug fix. Apparently C does not automatically copy in the way I was expecting.
+    Request newRequest;
+    newRequest.fd = fd;
+    strncpy(newRequest.filename, filename, sizeof(newRequest.filename) - 1);
+    newRequest.filename[sizeof(newRequest.filename) - 1] = '\0';  // ensure null-termination
+    newRequest.size = sbuf.st_size;
+
+
     //bufferRequestLock = //lock the buffer if the buffer is locked then wait or spin or something otherwise lock
     pthread_mutex_lock(&requestBufferLock);
       //the bufferRequestLock wasn't locked so now it is
@@ -312,10 +327,8 @@ void request_handle(int fd) {
     // Directory Traversal mitigation
     char cwdbuff[256];
     getcwd(cwdbuff, sizeof(cwdbuff));
-    if (strstr(filename, '..') != NULL) { /*the request contains a file path outside of the current webserver director (current working directory)*/
+    if (strstr(filename, "..") != NULL) { /*the request contains a file path outside of the current webserver director (current working directory)*/
       request_error(fd, filename, "403", "Invalid Path", "The requested file path contains an illegal character.");
-    }
-
     } else {
 		request_error(fd, filename, "501", "Not Implemented", "server does not serve dynamic content request");
     }
