@@ -168,12 +168,16 @@ void* thread_request_serve_static(void* arg)
   {
   case 0:
     index = fifo();
+    break;
   case 1:
     index = SmallestFirst();
+    break;
   case 2:
     index = random();
+    break;
   default:
     printf("invalid value in switch case");
+    break;
   }
   
   //sets the newRequest to the request in the buffer from the scheudling policies
@@ -191,6 +195,7 @@ void* thread_request_serve_static(void* arg)
   pthread_cond_signal(&bufferFull);
 
   //unlock
+  pthread_mutex_unlock(&requestBufferLock);
   request_serve_static(newRequest.fd, newRequest.filename, newRequest.size);
 }
 
