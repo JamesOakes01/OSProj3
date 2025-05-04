@@ -258,39 +258,48 @@ void* thread_request_serve_static(void* arg)
 // Initial handling of the request
 //
 void request_handle(int fd) {
-    int is_static;
-    struct stat sbuf;
-    char buf[MAXBUF], method[MAXBUF], uri[MAXBUF], version[MAXBUF];
-    char filename[MAXBUF], cgiargs[MAXBUF];
+  int is_static;
+  struct stat sbuf;
+  char buf[MAXBUF], method[MAXBUF], uri[MAXBUF], version[MAXBUF];
+  char filename[MAXBUF], cgiargs[MAXBUF];
     
 	// get the request type, file path and HTTP version
-    readline_or_die(fd, buf, MAXBUF);
-    sscanf(buf, "%s %s %s", method, uri, version);
-    printf("method:%s uri:%s version:%s\n", method, uri, version);
+  readline_or_die(fd, buf, MAXBUF);
+  sscanf(buf, "%s %s %s", method, uri, version);
+  printf("method:%s uri:%s version:%s\n", method, uri, version);
 
 	// verify if the request type is GET or not
-    if (strcasecmp(method, "GET")) {
-		request_error(fd, method, "501", "Not Implemented", "server does not implement this method");
-		return;
-    }
-    request_read_headers(fd);
+  if (strcasecmp(method, "GET")) {
+    request_error(fd, method, "501", "Not Implemented", "server does not implement this method");
+    return;
+  }
+  request_read_headers(fd);
     
 	// check requested content type (static/dynamic)
-    is_static = request_parse_uri(uri, filename, cgiargs);
+  is_static = request_parse_uri(uri, filename, cgiargs);
     
 	// get some data regarding the requested file, also check if requested file is present on server
-    if (stat(filename, &sbuf) < 0) {
-		request_error(fd, filename, "404", "Not found", "server could not find this file");
-		return;
-    }
+  if (stat(filename, &sbuf) < 0) {
+    request_error(fd, filename, "404", "Not found", "server could not find this file");
+    return;
+  }
     
 	// verify if requested content is static
-    if (is_static) {
-		if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
-			request_error(fd, filename, "403", "Forbidden", "server could not read this file");
-			return;
-		}
-		
+  if (is_static) {
+    if (!(S_ISREG(sbuf.st_mode)) || !(S_IRUSR & sbuf.st_mode)) {
+      request_error(fd, filename, "403", "Forbidden", "server could not read this file");
+      return;
+    }
+    
+
+    // Directory Traversal mitigation
+    char cwdbuff[256];
+    getcwd(cwdbuff, sizeof(cwdbuff));
+    if (strstr(filename, "..") != NULL) { /*the request contains a file path outside of the current webserver director (current working directory)*/
+      request_error(fd, filename, "403", "Invalid Path", "The requested file path contains an illegal character.");
+      return;
+    }
+
 		// TODO: write code to add HTTP requests in the buffersed on the scheduling policy
     //Request newRequest = {fd, filename, sbuf.st_size}; removing based to fix errors
 
@@ -304,32 +313,24 @@ void request_handle(int fd) {
 
     //bufferRequestLock = //lock the buffer if the buffer is locked then wait or spin or something otherwise lock
     pthread_mutex_lock(&requestBufferLock);
-      //the bufferRequestLock wasn't locked so now it is
-      
-      //check to see if buffer is fullsd
-      while (currentRequestBufferSize >= 10){
-        //buffer is full
-        printf("requestBuffer is full\n");
-        pthread_cond_wait(&bufferFull, &requestBufferLock);
-      }
-        //buffer is not full, proceed
-        //put request into the buffer at current size
-        requestBuffer[currentRequestBufferSize] = newRequest;
-        //increment the size
-        currentRequestBufferSize++;
-        pthread_cond_signal(&bufferEmpty);
-      pthread_mutex_unlock(&requestBufferLock); //unlock buffer
-    }
-  
+    //the bufferRequestLock wasn't locked so now it is
     
-
-
-    // Directory Traversal mitigation
-    char cwdbuff[256];
-    getcwd(cwdbuff, sizeof(cwdbuff));
-    if (strstr(filename, "..") != NULL) { /*the request contains a file path outside of the current webserver director (current working directory)*/
-      request_error(fd, filename, "403", "Invalid Path", "The requested file path contains an illegal character.");
-    } else {
-		request_error(fd, filename, "501", "Not Implemented", "server does not serve dynamic content request");
+    //check to see if buffer is fullsd
+    while (currentRequestBufferSize >= 10){
+      //buffer is full
+      printf("requestBuffer is full\n");
+      pthread_cond_wait(&bufferFull, &requestBufferLock);
     }
+    //buffer is not full, proceed
+    //put request into the buffer at current size
+    requestBuffer[currentRequestBufferSize] = newRequest;
+    //increment the size
+    currentRequestBufferSize++;
+    pthread_cond_signal(&bufferEmpty);
+    pthread_mutex_unlock(&requestBufferLock); //unlock buffer
+  } else {
+  request_error(fd, filename, "501", "Not Implemented", "server does not serve dynamic content request");
+  return;
+  }
 }
+
