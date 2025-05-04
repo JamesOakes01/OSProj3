@@ -20,6 +20,7 @@ typedef struct{
   int fd;
   char filename[MAXBUF]; //or hardcode 256
   int size;
+  int counter;
 } Request;
 
 Request requestBuffer[10]; //requests buffer array
@@ -189,7 +190,15 @@ int random_schedule(){
 int SmallestFirst(){
   int currentSmallestSize = findSize(requestBuffer[0].filename);
   int indexOfSmallestSize = 0;
+  requestBuffer[0].counter++;
+  if(requestBuffer[0].counter > 100){
+    return 0;
+  }
   for (int i = 1; i < currentRequestBufferSize; i++){
+    requestBuffer[i].counter++;
+    if(requestBuffer[i].counter > 100){
+      return i;
+    }
     if ((findSize(requestBuffer[i].filename)) < currentSmallestSize){
       indexOfSmallestSize = i;
       currentSmallestSize = findSize(requestBuffer[i].filename);
@@ -251,7 +260,6 @@ void* thread_request_serve_static(void* arg)
   //unlock
   pthread_mutex_unlock(&requestBufferLock);
   request_serve_static(newRequest.fd, newRequest.filename, newRequest.size);
-  return NULL;
 }
 
 //
@@ -278,6 +286,14 @@ void request_handle(int fd) {
 	// check requested content type (static/dynamic)
   is_static = request_parse_uri(uri, filename, cgiargs);
     
+  // Directory Traversal mitigation
+  char cwdbuff[256];
+  getcwd(cwdbuff, sizeof(cwdbuff));
+  if (strstr(filename, "..") != NULL) { /*the request contains a file path outside of the current webserver director (current working directory)*/
+    request_error(fd, filename, "403", "Invalid Path", "The requested file path contains an illegal character.");
+    return;
+  }
+
 	// get some data regarding the requested file, also check if requested file is present on server
   if (stat(filename, &sbuf) < 0) {
     request_error(fd, filename, "404", "Not found", "server could not find this file");
@@ -290,15 +306,6 @@ void request_handle(int fd) {
       request_error(fd, filename, "403", "Forbidden", "server could not read this file");
       return;
     }
-    
-
-    // Directory Traversal mitigation
-    char cwdbuff[256];
-    getcwd(cwdbuff, sizeof(cwdbuff));
-    if (strstr(filename, "..") != NULL) { /*the request contains a file path outside of the current webserver director (current working directory)*/
-      request_error(fd, filename, "403", "Invalid Path", "The requested file path contains an illegal character.");
-      return;
-    }
 
 		// TODO: write code to add HTTP requests in the buffersed on the scheduling policy
     //Request newRequest = {fd, filename, sbuf.st_size}; removing based to fix errors
@@ -309,6 +316,7 @@ void request_handle(int fd) {
     strncpy(newRequest.filename, filename, sizeof(newRequest.filename) - 1);
     newRequest.filename[sizeof(newRequest.filename) - 1] = '\0';  // ensure null-termination
     newRequest.size = sbuf.st_size;
+    newRequest.counter = 0;
 
 
     //bufferRequestLock = //lock the buffer if the buffer is locked then wait or spin or something otherwise lock
